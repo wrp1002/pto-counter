@@ -1,5 +1,5 @@
 from imap_tools import MailBox, AND
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 username = ""
@@ -28,11 +28,22 @@ cancel_pto_phrases = {
 messages = []
 pto_map = {}
 
+
 def GetDateFromMsg(msg):
-	date = msg.date
+	msg_date = msg.date
 	subject = msg.subject.lower().replace("1/2 pto", "pto")
 	match = re.search(" .{1,2}\/.{1,2} ", subject)
-	print(match)
+
+	if match:
+		return match.group(0).strip()
+
+	if "today" in subject:
+		return msg_date.strftime("%#m/%d")
+		
+	if "tomorrow" in subject:
+		return (msg_date + timedelta(days=1)).strftime("%#m/%d")
+
+	return msg_date.strftime("%#m/%d")
 
 
 # get list of email subjects from INBOX folder
@@ -44,33 +55,49 @@ with MailBox('imap.gmail.com').login(username, password, initial_folder='[Gmail]
 		date_str = msg.date_str
 		subject = msg.subject
 		pto_amount = 0
-
-		GetDateFromMsg(msg)
-
-		print(msg.date)
-		print(f"\nDate:     {date_str}")
-		print(f"Subject:  {subject}")
+		outcome = ""
+		found_date = GetDateFromMsg(msg)
 		messages.append(msg)
 
 
-		if any(half_day_phrase in msg.subject.lower() for half_day_phrase in half_day_phrases):
-			print("Half day")
+		if any(half_day_phrase in subject.lower() for half_day_phrase in half_day_phrases):
+			outcome = "Half day"
 			pto_amount = 0.5
 
 		if "&" in msg.subject:
 			amount = len(msg.subject.split("&"))
 			pto_amount += amount
-			print(f"{amount} days")
+			outcome = f"{amount} days"
 
 		if not pto_amount:
 			pto_amount = 1
-			print("1 day")
+			outcome = "1 day"
 			
-		pto_map[date_str] = {
+		if any(cancel_pto_phrase in subject.lower() for cancel_pto_phrase in cancel_pto_phrases):
+			pto_amount = 0
+			outcome = f"Cancel PTO for {found_date}"
+
+		if found_date in pto_map:
+			pto_map[found_date]["pto_amount"] = pto_amount
+			pto_map[found_date]["reasons"].append(subject)
+		else:
+			pto_map[found_date] = {
+				"pto_amount": pto_amount,
+				"reasons": [subject],
+			}
+
+		print()
+		print(f"Date:       {date_str}")
+		print(f"Found date: {found_date}")
+		print(f"Subject:    {subject}")
+		print(outcome)
 			
-		}
-			
-		used_pto += pto_amount
+
+print()
+
+for date, pto_info in pto_map.items():
+	used_pto += pto_info["pto_amount"]
+	print("Date:", date, " Amount:", pto_info["pto_amount"], " Reasons:", ", ".join(pto_info["reasons"]))
 
 
 print()
