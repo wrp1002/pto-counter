@@ -75,7 +75,7 @@ with MailBox('imap.gmail.com').login(username, password, initial_folder='[Gmail]
 			
 		if any(cancel_pto_phrase in subject.lower() for cancel_pto_phrase in cancel_pto_phrases):
 			pto_amount = 0
-			outcome = f"Cancel PTO for {found_date}"
+			outcome = f"Cancel PTO"
 
 		if found_date in pto_map:
 			pto_map[found_date]["pto_amount"] = pto_amount
@@ -87,17 +87,16 @@ with MailBox('imap.gmail.com').login(username, password, initial_folder='[Gmail]
 			}
 
 		print()
-		print(f"Date:       {date_str}")
-		print(f"Found date: {found_date}")
-		print(f"Subject:    {subject}")
-		print(outcome)
+		print(f"Date:     {date_str}")
+		print(f"Subject:  {subject}")
+		print(f"Outcome:  {outcome} for {found_date}")
 			
 
 print()
 
 for date, pto_info in pto_map.items():
 	used_pto += pto_info["pto_amount"]
-	print("Date:", date, " Amount:", pto_info["pto_amount"], " Reasons:", ", ".join(pto_info["reasons"]))
+	print("Date:", date, " Amount:", pto_info["pto_amount"], " Reasons:", ", ".join([f'"{reason}"' for reason in pto_info["reasons"]] ) )
 
 
 print()
