@@ -7,6 +7,8 @@ password = ""
 
 total_pto = 18
 used_pto = 0
+date_regex = ".{1,2}\/.{1,2}"
+date_range_regex = f"({date_regex}) to ({date_regex})"
 
 current_year = datetime.now().year
 first_day = datetime(current_year, 1, 1).date()
@@ -29,21 +31,42 @@ messages = []
 pto_map = {}
 
 
-def GetDateFromMsg(msg):
+# Extract dates and return them as a list of strings in the format m/d
+def GetDatesFromMsg(msg):
 	msg_date = msg.date
 	subject = msg.subject.lower().replace("1/2 pto", "pto")
-	match = re.search(" .{1,2}\/.{1,2} ", subject)
+
+	# Check for date range (ex. 3/5 to 3/7)
+	range_match = re.search(date_range_regex, subject)
+	if range_match:
+		days = []
+		date1_str = f"{range_match.group(1).strip()}/{current_year}"
+		date2_str = f"{range_match.group(2).strip()}/{current_year}"
+		start_date = datetime.strptime(date1_str, "%m/%d/%Y")
+		end_date = datetime.strptime(date2_str, "%m/%d/%Y")
+
+		delta = end_date - start_date
+		for i in range(delta.days + 1):
+			day = start_date + timedelta(days=i)
+			days.append(day.strftime("%#m/%#d"))
+
+		return days
+
+	# Otherwise it's just a single day
+	match = re.search(date_regex, subject)
 
 	if match:
-		return match.group(0).strip()
+		return [match.group(0).strip()]
 
 	if "today" in subject:
-		return msg_date.strftime("%#m/%d")
-		
-	if "tomorrow" in subject:
-		return (msg_date + timedelta(days=1)).strftime("%#m/%d")
+		return [msg_date.strftime("%#m/%#d")]
 
-	return msg_date.strftime("%#m/%d")
+	if "tomorrow" in subject:
+		return [(msg_date + timedelta(days=1)).strftime("%#m/%#d")]
+
+	return [msg_date.strftime("%#m/%#d")]
+
+
 
 
 # get list of email subjects from INBOX folder
@@ -56,7 +79,7 @@ with MailBox('imap.gmail.com').login(username, password, initial_folder='[Gmail]
 		subject = msg.subject
 		pto_amount = 0
 		outcome = ""
-		found_date = GetDateFromMsg(msg)
+		found_dates = GetDatesFromMsg(msg)
 		messages.append(msg)
 
 
@@ -71,26 +94,27 @@ with MailBox('imap.gmail.com').login(username, password, initial_folder='[Gmail]
 
 		if not pto_amount:
 			pto_amount = 1
-			outcome = "1 day"
-			
+			outcome = f"{len(found_dates)} day(s)"
+
 		if any(cancel_pto_phrase in subject.lower() for cancel_pto_phrase in cancel_pto_phrases):
 			pto_amount = 0
 			outcome = f"Cancel PTO"
 
-		if found_date in pto_map:
-			pto_map[found_date]["pto_amount"] = pto_amount
-			pto_map[found_date]["reasons"].append(subject)
-		else:
-			pto_map[found_date] = {
-				"pto_amount": pto_amount,
-				"reasons": [subject],
-			}
+		for found_date in found_dates:
+			if found_date in pto_map:
+				pto_map[found_date]["pto_amount"] = pto_amount
+				pto_map[found_date]["reasons"].append(subject)
+			else:
+				pto_map[found_date] = {
+					"pto_amount": pto_amount,
+					"reasons": [subject],
+				}
 
 		print()
 		print(f"Date:     {date_str}")
 		print(f"Subject:  {subject}")
-		print(f"Outcome:  {outcome} for {found_date}")
-			
+		print(f"Outcome:  {outcome} for {','.join(found_dates)}")
+
 
 print()
 
